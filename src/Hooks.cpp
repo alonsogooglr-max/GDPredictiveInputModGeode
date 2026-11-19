@@ -399,10 +399,11 @@ class $modify(PIBEffectGameObject, EffectGameObject) {
     }
 };
 
+#if !defined(GEODE_IS_ANDROID)
 namespace {
-    // GJBaseGameLayer::gameEventTriggered drives Event triggers in levels. Its
-    // 2.2091 binding is a placeholder, so it is hooked by address (found by
-    // decompiling handleButton, which raises JumpPush/JumpRelease through it).
+    // The original fixed address is Windows-only. Never apply it to Android:
+    // an incorrect address can crash the game. Android builds currently leave
+    // Event-trigger simulation unsupported until an ARM32-specific hook is verified.
     constexpr uintptr_t kGameEventTriggered = 0x33ac80;
     using GameEventFn = void (*)(GJBaseGameLayer*, int, int, int);
 
@@ -411,16 +412,21 @@ namespace {
         reinterpret_cast<GameEventFn>(base::get() + kGameEventTriggered)(self, event, material, playerID);
     }
 }
+#endif
 
 $on_mod(Loaded) {
     initSettings([] { refreshStatus(); });
 
+#if !defined(GEODE_IS_ANDROID)
     auto hooked = Mod::get()->hook(
         reinterpret_cast<void*>(base::get() + kGameEventTriggered),
         &gameEventTriggeredHook,
         "GJBaseGameLayer::gameEventTriggered"
     );
     if (!hooked) log::error("Failed to hook gameEventTriggered: {}", hooked.unwrapErr());
+#else
+    log::warn("Android build: Event-trigger simulation hook disabled pending verified ARM32 address");
+#endif
 
     listenForKeybindSettingPresses("cycle-mode", [](Keybind const&, bool down, bool repeat, double) {
         if (!down || repeat || !currentPlayLayer()) return false;
